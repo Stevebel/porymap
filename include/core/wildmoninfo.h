@@ -36,4 +36,5 @@ typedef QVector<EncounterGroup> EncounterGroups;
 WildMonInfo getDefaultMonInfo(void);
 void combineEncounters(WildMonInfo &to, WildMonInfo from);
 
+
 #endif // GUARD_WILDMONINFO_H
