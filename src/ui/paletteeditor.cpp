@@ -87,7 +87,13 @@ PaletteEditor::PaletteEditor(Project *project, Tileset *primaryTileset, Tileset 
         connect(this->pickButtons[i], &QToolButton::clicked, [this, i](){ this->pickColor(i); });
     }
 
-    setBitDepth(24);
+    int bitDepth = porymapConfig.getPaletteEditorBitDepth();
+    if (bitDepth == 15) {
+        this->ui->bit_depth_15->setChecked(true);
+    } else {
+        this->ui->bit_depth_24->setChecked(true);
+    }
+    setBitDepth(bitDepth);
 
     // Connect bit depth buttons
     connect(this->ui->bit_depth_15, &QRadioButton::toggled, [this](bool checked){ if (checked) this->setBitDepth(15); });
@@ -227,6 +233,7 @@ void PaletteEditor::setBitDepth(int bits) {
         break;
     }
     this->bitDepth = bits;
+    porymapConfig.setPaletteEditorBitDepth(bits);
     refreshColorUis();
     setSignalsEnabled(true);
 }
@@ -261,18 +268,15 @@ void PaletteEditor::setRgbFromSliders(int colorIndex) {
 void PaletteEditor::setRgbFromHexEdit(int colorIndex) {
     QString text = this->hexEdits[colorIndex]->text();
     bool ok = false;
+    int rgb = text.toInt(&ok, 16);
+    if (!ok) rgb = 0xFFFFFFFF;
     if (this->bitDepth == 15) {
-        int rgb15 = text.toInt(&ok, 16);
-        int rc = gbaRed(rgb15);
-        int gc = gbaGreen(rgb15);
-        int bc = gbaBlue(rgb15);
-        QRgb rgb = qRgb(rc, gc, bc);
-        if (!ok) rgb = 0xFFFFFFFF;
-        setRgb(colorIndex, rgb);
+        int rc = gbaRed(rgb);
+        int gc = gbaGreen(rgb);
+        int bc = gbaBlue(rgb);
+        setRgb(colorIndex, qRgb(rgb8(rc), rgb8(gc), rgb8(bc)));
     } else {
-        QRgb rgb = text.toInt(&ok, 16);
-        if (!ok) rgb = 0xFFFFFFFF;
-        setRgb(colorIndex, rgb);
+        setRgb(colorIndex, qRgb(qRed(rgb), qGreen(rgb), qBlue(rgb)));
     }
 }
 

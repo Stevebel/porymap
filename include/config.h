@@ -36,7 +36,7 @@ protected:
     virtual void setUnreadKeys() = 0;
     bool getConfigBool(QString key, QString value);
     int getConfigInteger(QString key, QString value, int min, int max, int defaultValue);
-    long getConfigLong(QString key, QString value, long min, long max, long defaultValue);
+    uint32_t getConfigUint32(QString key, QString value, uint32_t min, uint32_t max, uint32_t defaultValue);
 };
 
 class PorymapConfig: public KeyValueConfigBase
@@ -81,6 +81,7 @@ public:
     void setTheme(QString theme);
     void setTextEditorOpenFolder(const QString &command);
     void setTextEditorGotoLine(const QString &command);
+    void setPaletteEditorBitDepth(int bitDepth);
     QString getRecentProject();
     bool getReopenOnLaunch();
     MapSortOrder getMapSortOrder();
@@ -100,6 +101,7 @@ public:
     QString getTheme();
     QString getTextEditorOpenFolder();
     QString getTextEditorGotoLine();
+    int getPaletteEditorBitDepth();
 protected:
     virtual QString getConfigFilepath() override;
     virtual void parseConfigKeyValue(QString key, QString value) override;
@@ -135,6 +137,7 @@ private:
     QString theme;
     QString textEditorOpenFolder;
     QString textEditorGotoLine;
+    int paletteEditorBitDepth;
 };
 
 extern PorymapConfig porymapConfig;

@@ -410,11 +410,12 @@ bool Project::readMapLayouts() {
     mapLayouts.clear();
     mapLayoutsTable.clear();
 
-    QString layoutsFilepath = QString("%1/%2").arg(root).arg(projectConfig.getFilePath(ProjectFilePath::json_layouts));
-    fileWatcher.addPath(layoutsFilepath);
+    QString layoutsFilepath = projectConfig.getFilePath(ProjectFilePath::json_layouts);
+    QString fullFilepath = QString("%1/%2").arg(root).arg(layoutsFilepath);
+    fileWatcher.addPath(fullFilepath);
     QJsonDocument layoutsDoc;
-    if (!parser.tryParseJsonFile(&layoutsDoc, layoutsFilepath)) {
-        logError(QString("Failed to read map layouts from %1").arg(layoutsFilepath));
+    if (!parser.tryParseJsonFile(&layoutsDoc, fullFilepath)) {
+        logError(QString("Failed to read map layouts from %1").arg(fullFilepath));
         return false;
     }
 
@@ -460,35 +461,46 @@ bool Project::readMapLayouts() {
         layout->id = ParseUtil::jsonToQString(layoutObj["id"]);
         if (layout->id.isEmpty()) {
             logError(QString("Missing 'id' value on layout %1 in %2").arg(i).arg(layoutsFilepath));
+            delete layout;
             return false;
+        }
+        if (mapLayouts.contains(layout->id)) {
+            logWarn(QString("Duplicate layout entry for %1 in %2 will be ignored.").arg(layout->id).arg(layoutsFilepath));
+            delete layout;
+            continue;
         }
         layout->name = ParseUtil::jsonToQString(layoutObj["name"]);
         if (layout->name.isEmpty()) {
-            logError(QString("Missing 'name' value on layout %1 in %2").arg(i).arg(layoutsFilepath));
+            logError(QString("Missing 'name' value for %1 in %2").arg(layout->id).arg(layoutsFilepath));
+            delete layout;
             return false;
         }
         int lwidth = ParseUtil::jsonToInt(layoutObj["width"]);
         if (lwidth <= 0) {
-            logError(QString("Invalid layout 'width' value '%1' on layout %2 in %3. Must be greater than 0.").arg(lwidth).arg(i).arg(layoutsFilepath));
+            logError(QString("Invalid 'width' value '%1' for %2 in %3. Must be greater than 0.").arg(lwidth).arg(layout->id).arg(layoutsFilepath));
+            delete layout;
             return false;
         }
         layout->width = lwidth;
         int lheight = ParseUtil::jsonToInt(layoutObj["height"]);
         if (lheight <= 0) {
-            logError(QString("Invalid layout 'height' value '%1' on layout %2 in %3. Must be greater than 0.").arg(lheight).arg(i).arg(layoutsFilepath));
+            logError(QString("Invalid 'height' value '%1' for %2 in %3. Must be greater than 0.").arg(lheight).arg(layout->id).arg(layoutsFilepath));
+            delete layout;
             return false;
         }
         layout->height = lheight;
         if (useCustomBorderSize) {
             int bwidth = ParseUtil::jsonToInt(layoutObj["border_width"]);
             if (bwidth <= 0) {  // 0 is an expected border width/height that should be handled, GF used it for the RS layouts in FRLG
-                logWarn(QString("Invalid layout 'border_width' value '%1' on layout %2 in %3. Must be greater than 0. Using default (%4) instead.").arg(bwidth).arg(i).arg(layoutsFilepath).arg(DEFAULT_BORDER_WIDTH));
+                logWarn(QString("Invalid 'border_width' value '%1' for %2 in %3. Must be greater than 0. Using default (%4) instead.")
+                                .arg(bwidth).arg(layout->id).arg(layoutsFilepath).arg(DEFAULT_BORDER_WIDTH));
                 bwidth = DEFAULT_BORDER_WIDTH;
             }
             layout->border_width = bwidth;
             int bheight = ParseUtil::jsonToInt(layoutObj["border_height"]);
             if (bheight <= 0) {
-                logWarn(QString("Invalid layout 'border_height' value '%1' on layout %2 in %3. Must be greater than 0. Using default (%4) instead.").arg(bheight).arg(i).arg(layoutsFilepath).arg(DEFAULT_BORDER_HEIGHT));
+                logWarn(QString("Invalid 'border_height' value '%1' for %2 in %3. Must be greater than 0. Using default (%4) instead.")
+                                .arg(bheight).arg(layout->id).arg(layoutsFilepath).arg(DEFAULT_BORDER_HEIGHT));
                 bheight = DEFAULT_BORDER_HEIGHT;
             }
             layout->border_height = bheight;
@@ -498,22 +510,26 @@ bool Project::readMapLayouts() {
         }
         layout->tileset_primary_label = ParseUtil::jsonToQString(layoutObj["primary_tileset"]);
         if (layout->tileset_primary_label.isEmpty()) {
-            logError(QString("Missing 'primary_tileset' value on layout %1 in %2").arg(i).arg(layoutsFilepath));
+            logError(QString("Missing 'primary_tileset' value for %1 in %2").arg(layout->id).arg(layoutsFilepath));
+            delete layout;
             return false;
         }
         layout->tileset_secondary_label = ParseUtil::jsonToQString(layoutObj["secondary_tileset"]);
         if (layout->tileset_secondary_label.isEmpty()) {
-            logError(QString("Missing 'secondary_tileset' value on layout %1 in %2").arg(i).arg(layoutsFilepath));
+            logError(QString("Missing 'secondary_tileset' value for %1 in %2").arg(layout->id).arg(layoutsFilepath));
+            delete layout;
             return false;
         }
         layout->border_path = ParseUtil::jsonToQString(layoutObj["border_filepath"]);
         if (layout->border_path.isEmpty()) {
-            logError(QString("Missing 'border_filepath' value on layout %1 in %2").arg(i).arg(layoutsFilepath));
+            logError(QString("Missing 'border_filepath' value for %1 in %2").arg(layout->id).arg(layoutsFilepath));
+            delete layout;
             return false;
         }
         layout->blockdata_path = ParseUtil::jsonToQString(layoutObj["blockdata_filepath"]);
         if (layout->blockdata_path.isEmpty()) {
-            logError(QString("Missing 'blockdata_filepath' value on layout %1 in %2").arg(i).arg(layoutsFilepath));
+            logError(QString("Missing 'blockdata_filepath' value for %1 in %2").arg(layout->id).arg(layoutsFilepath));
+            delete layout;
             return false;
         }
         mapLayouts.insert(layout->id, layout);
@@ -582,7 +598,6 @@ void Project::saveMapGroups() {
     }
 
     OrderedJson::object mapGroupsObj;
-    mapGroupsObj["layouts_table_label"] = layoutsLabel;
 
     OrderedJson::array groupNamesArr;
     for (QString groupName : this->groupNames) {
@@ -640,24 +655,31 @@ void Project::saveWildMonData() {
             OrderedJson::object fieldObject;
             WildMonInfo monInfo = encounterHeader.wildMons[fieldName];
             fieldObject["encounter_rate"] = monInfo.encounterRate;
-            OrderedJson::array monArrayArray;
-            bool hasMons = false;
-            for (auto monList : monInfo.wildPokemon) {
-                OrderedJson::array monArray;
-                for (WildPokemon wildMon : monList) {
-                OrderedJson::object monEntry;
-                    monEntry["min_level"] = wildMon.minLevel;
-                    monEntry["max_level"] = wildMon.maxLevel;
-                    monEntry["species"] = wildMon.species;
-                    monEntry["encounter_rate"] = wildMon.encounterRate;
-                    monArray.push_back(monEntry);
+            OrderedJson::array dayArray;
+            OrderedJson::array nightArray;
+            for (auto wildMon : monInfo.wildPokemon) {
+                if (wildMon.species == "NONE") continue; // Skip empty entries
+
+                if (wildMon.encounterChanceDay > 0) {
+                    OrderedJson::object dayEntry;
+                    dayEntry["min_level"] = wildMon.minLevel;
+                    dayEntry["max_level"] = wildMon.maxLevel;
+                    dayEntry["species"] = wildMon.species;
+                    dayEntry["encounter_rate"] = wildMon.encounterChanceDay;
+                    dayArray.push_back(dayEntry);
                 }
-                if (monArray.size() > 0) {
-                    hasMons = true;
+                
+                if (wildMon.encounterChanceNight > 0) {
+                    OrderedJson::object nightEntry;
+                    nightEntry["min_level"] = wildMon.minLevel;
+                    nightEntry["max_level"] = wildMon.maxLevel;
+                    nightEntry["species"] = wildMon.species;
+                    nightEntry["encounter_rate"] = wildMon.encounterChanceNight;
+                    nightArray.push_back(nightEntry);
                 }
-                monArrayArray.push_back(monArray);
             }
-            if (hasMons) {
+            if (dayArray.size() > 0 || nightArray.size() > 0) {
+                OrderedJson::array monArrayArray = {dayArray, nightArray};
                 fieldObject["mons"] = monArrayArray;
                 encounterObject[fieldName] = fieldObject;
                 hasEncounters = true;
@@ -676,10 +698,8 @@ void Project::saveWildMonData() {
         wildEncounterGroups.push_back(extraObject);
     }
 
-    OrderedJson::array timesArray;
-    for (QString time : this->timesOfDay) {
-        timesArray.push_back(time);
-    }
+    // DAY, NIGHT
+    OrderedJson::array timesArray = {"DAY", "NIGHT"};
     wildEncountersObject["times"] = timesArray;
     wildEncountersObject["wild_encounter_groups"] = wildEncounterGroups;
 
@@ -866,8 +886,8 @@ void Project::saveTilesets(Tileset *primaryTileset, Tileset *secondaryTileset) {
 }
 
 void Project::saveTilesetMetatileLabels(Tileset *primaryTileset, Tileset *secondaryTileset) {
-    QString primaryPrefix = QString("METATILE_%1_").arg(QString(primaryTileset->name).replace("gTileset_", ""));
-    QString secondaryPrefix = QString("METATILE_%1_").arg(QString(secondaryTileset->name).replace("gTileset_", ""));
+    QString primaryPrefix = primaryTileset->getMetatileLabelPrefix();
+    QString secondaryPrefix = secondaryTileset->getMetatileLabelPrefix();
 
     QMap<QString, int> defines;
     bool definesFileModified = false;
@@ -888,21 +908,19 @@ void Project::saveTilesetMetatileLabels(Tileset *primaryTileset, Tileset *second
     }
 
     // Add the new labels.
-    for (int i = 0; i < primaryTileset->metatiles.size(); i++) {
-        Metatile *metatile = primaryTileset->metatiles.at(i);
-        if (metatile->label.size() != 0) {
-            QString defineName = QString("%1%2").arg(primaryPrefix, metatile->label);
-            defines.insert(defineName, i);
-            definesFileModified = true;
-        }
+    for (int metatileId : primaryTileset->metatileLabels.keys()) {
+        QString label = primaryTileset->metatileLabels.value(metatileId);
+        if (label.isEmpty()) continue;
+        QString defineName = QString("%1%2").arg(primaryPrefix, label);
+        defines.insert(defineName, metatileId);
+        definesFileModified = true;
     }
-    for (int i = 0; i < secondaryTileset->metatiles.size(); i++) {
-        Metatile *metatile = secondaryTileset->metatiles.at(i);
-        if (metatile->label.size() != 0) {
-            QString defineName = QString("%1%2").arg(secondaryPrefix, metatile->label);
-            defines.insert(defineName, i + Project::num_tiles_primary);
-            definesFileModified = true;
-        }
+    for (int metatileId : secondaryTileset->metatileLabels.keys()) {
+        QString label = secondaryTileset->metatileLabels.value(metatileId);
+        if (label.isEmpty()) continue;
+        QString defineName = QString("%1%2").arg(secondaryPrefix, label);
+        defines.insert(defineName, metatileId);
+        definesFileModified = true;
     }
 
     if (!definesFileModified) {
@@ -910,7 +928,8 @@ void Project::saveTilesetMetatileLabels(Tileset *primaryTileset, Tileset *second
     }
 
     auto getTilesetFromLabel = [](QString labelName) {
-        return QRegularExpression("METATILE_(?<tileset>[A-Za-z0-9]+)_").match(labelName).captured("tileset");
+        static const QRegularExpression re_tilesetName("METATILE_(?<tileset>[A-Za-z0-9]+)_");
+        return re_tilesetName.match(labelName).captured("tileset");
     };
 
     QString outputText = "#ifndef GUARD_METATILE_LABELS_H\n";
@@ -1396,36 +1415,13 @@ void Project::loadTilesetPalettes(Tileset* tileset) {
     QList<QList<QRgb>> palettes;
     QList<QList<QRgb>> palettePreviews;
     for (int i = 0; i < tileset->palettePaths.length(); i++) {
-        QList<QRgb> palette;
         QString path = tileset->palettePaths.value(i);
-        QString text = parser.readTextFile(path);
-        if (!text.isNull()) {
-            QStringList lines = text.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts);
-            if (lines.length() == 19 && lines[0] == "JASC-PAL" && lines[1] == "0100" && lines[2] == "16") {
-                for (int j = 0; j < 16; j++) {
-                    QStringList rgb = lines[j + 3].split(QRegularExpression(" "), Qt::SkipEmptyParts);
-                    if (rgb.length() != 3) {
-                        logWarn(QString("Invalid tileset palette RGB value: '%1'").arg(lines[j + 3]));
-                        palette.append(qRgb((j - 3) * 16, (j - 3) * 16, (j - 3) * 16));
-                    } else {
-                        int red = rgb[0].toInt();
-                        int green = rgb[1].toInt();
-                        int blue = rgb[2].toInt();
-                        QRgb color = qRgb(red, green, blue);
-                        palette.append(color);
-                    }
-                }
-            } else {
-                logError(QString("Invalid JASC-PAL palette file for tileset: '%1'").arg(path));
-                for (int j = 0; j < 16; j++) {
-                    palette.append(qRgb(j * 16, j * 16, j * 16));
-                }
-            }
-        } else {
+        bool error = false;
+        QList<QRgb> palette = PaletteUtil::parse(path, &error);
+        if (error) {
             for (int j = 0; j < 16; j++) {
                 palette.append(qRgb(j * 16, j * 16, j * 16));
             }
-            logError(QString("Could not open tileset palette path '%1'").arg(path));
         }
 
         palettes.append(palette);
@@ -1495,23 +1491,33 @@ void Project::loadTilesetMetatiles(Tileset* tileset) {
     }
 }
 
-void Project::loadTilesetMetatileLabels(Tileset* tileset) {
-    QString tilesetPrefix = QString("METATILE_%1_").arg(QString(tileset->name).replace("gTileset_", ""));
+bool Project::readTilesetMetatileLabels() {
+    metatileLabelsMap.clear();
+
     QString metatileLabelsFilename = projectConfig.getFilePath(ProjectFilePath::constants_metatile_labels);
     fileWatcher.addPath(root + "/" + metatileLabelsFilename);
-    QMap<QString, int> labels = parser.readCDefines(metatileLabelsFilename, QStringList() << tilesetPrefix);
 
-    for (QString labelName : labels.keys()) {
-        int metatileId = labels[labelName];
-        // subtract Project::num_tiles_primary from secondary metatiles
-        int offset = tileset->is_secondary ? Project::num_tiles_primary : 0;
-        Metatile *metatile = Tileset::getMetatile(metatileId - offset, tileset, nullptr);
-        if (metatile) {
-            metatile->label = labelName.replace(tilesetPrefix, "");
-        } else {
-            QString hexString = QString("%1").arg(metatileId, 3, 16, QChar('0')).toUpper();
-            logError(QString("Metatile 0x%1 cannot be found in tileset '%2'").arg(hexString, tileset->name));
+    QMap<QString, int> labels = parser.readCDefines(metatileLabelsFilename, QStringList() << "METATILE_");
+
+    for (QString tilesetLabel : this->tilesetLabelsOrdered) {
+        QString metatileLabelPrefix = Tileset::getMetatileLabelPrefix(tilesetLabel);
+        for (QString key : labels.keys()) {
+            if (key.startsWith(metatileLabelPrefix)) {
+                metatileLabelsMap[tilesetLabel][key] = labels[key];
+            }
         }
+    }
+
+    return true;
+}
+
+void Project::loadTilesetMetatileLabels(Tileset* tileset) {
+    QString metatileLabelPrefix = tileset->getMetatileLabelPrefix();
+
+    // Reverse map for faster lookup by metatile id
+    for (QString labelName : metatileLabelsMap[tileset->name].keys()) {
+        int metatileId = metatileLabelsMap[tileset->name][labelName];
+        tileset->metatileLabels[metatileId] = labelName.replace(metatileLabelPrefix, "");
     }
 }
 
@@ -1579,9 +1585,12 @@ void Project::deleteFile(QString path) {
     }
 }
 
+static bool nightMonMatchesDay(WildPokemon &night, WildPokemon &day) {
+    return day.encounterChanceNight == 0 && night.species == day.species && night.minLevel == day.minLevel && night.maxLevel == day.maxLevel;
+}
+
 bool Project::readWildMonData() {
     extraEncounterGroups.clear();
-    timesOfDay.clear();
     wildMonData.clear();
     encounterFieldTypes.clear();
     encounterFieldTypes.append("land_mons");
@@ -1629,30 +1638,44 @@ bool Project::readWildMonData() {
                     header.wildMons[field].active = true;
                     header.wildMons[field].encounterRate = encounterFieldObj["encounter_rate"].int_value();
                     auto monTimes = encounterFieldObj["mons"].array_items();
-                    for (int i = 0; i < monTimes.size(); i++) {
-                        auto mons = monTimes[i].array_items();
-                        QVector<WildPokemon> wildPokemon;
-                        for (auto mon : mons) {
-                            WildPokemon newMon;
-                            OrderedJson::object monObj = mon.object_items();
-                            newMon.minLevel = monObj["min_level"].int_value();
-                            newMon.maxLevel = monObj["max_level"].int_value();
-                            newMon.species = monObj["species"].string_value();
-                            newMon.encounterRate = monObj["encounter_rate"].int_value();
-                            wildPokemon.append(newMon);
+                    // Day
+                    auto dayMons = monTimes[0].array_items();
+                    for (auto mon : dayMons) {
+                        WildPokemon newMon;
+                        OrderedJson::object monObj = mon.object_items();
+                        newMon.minLevel = monObj["min_level"].int_value();
+                        newMon.maxLevel = monObj["max_level"].int_value();
+                        newMon.species = monObj["species"].string_value();
+                        newMon.encounterChanceDay = monObj["encounter_rate"].int_value();
+                        header.wildMons[field].wildPokemon.append(newMon);
+                    }
+                    // Night
+                    auto nightMons = monTimes[1].array_items();
+                    for (auto mon : nightMons) {
+                        WildPokemon newMon;
+                        OrderedJson::object monObj = mon.object_items();
+                        newMon.minLevel = monObj["min_level"].int_value();
+                        newMon.maxLevel = monObj["max_level"].int_value();
+                        newMon.species = monObj["species"].string_value();
+                        // Find matching day mon and merge
+                        bool foundMatch = false;
+                        for (int i = 0; i < header.wildMons[field].wildPokemon.size(); i++) {
+                            if (nightMonMatchesDay(header.wildMons[field].wildPokemon[i], newMon)) {
+                                header.wildMons[field].wildPokemon[i].encounterChanceNight = monObj["encounter_rate"].int_value();
+                                foundMatch = true;
+                                break;
+                            }
                         }
-                        header.wildMons[field].wildPokemon.append(wildPokemon);
+                        if (!foundMatch) {
+                            newMon.encounterChanceNight = monObj["encounter_rate"].int_value();
+                            header.wildMons[field].wildPokemon.append(newMon);
+                        }
                     }
                 }
             }
             wildMonData.insert({mapConstant, header});
             group.encounters.append(header);
         }
-    }
-
-    // Load times of day
-    for (auto time : wildMonObj["times"].array_items()) {
-        timesOfDay.append(time.string_value());
     }
 
     return true;
@@ -1815,7 +1838,7 @@ bool Project::readTilesetLabels() {
             logError(QString("Failed to read tileset labels from '%1' or '%2'.").arg(filename).arg(asm_filename));
             return false;
         }
-        QRegularExpression re("(?<label>[A-Za-z0-9_]*):{1,2}[A-Za-z0-9_@ ]*\\s+.+\\s+\\.byte\\s+(?<isSecondary>[A-Za-z0-9_]+)");
+        static const QRegularExpression re("(?<label>[A-Za-z0-9_]*):{1,2}[A-Za-z0-9_@ ]*\\s+.+\\s+\\.byte\\s+(?<isSecondary>[A-Za-z0-9_]+)");
         QRegularExpressionMatchIterator iter = re.globalMatch(text);
         while (iter.hasNext()) {
             QRegularExpressionMatch match = iter.next();
@@ -1974,7 +1997,8 @@ bool Project::readHealLocations() {
     QString text = parser.readTextFile(root + "/" + filename);
 
     // Strip comments
-    text.replace(QRegularExpression("//.*?(\r\n?|\n)|/\\*.*?\\*/", QRegularExpression::DotMatchesEverythingOption), "");
+    static const QRegularExpression re_comments("//.*?(\r\n?|\n)|/\\*.*?\\*/", QRegularExpression::DotMatchesEverythingOption);
+    text.replace(re_comments, "");
 
     bool respawnEnabled = projectConfig.getHealLocationRespawnDataEnabled();
 
@@ -1983,7 +2007,7 @@ bool Project::readHealLocations() {
     this->healLocationDataQualifiers = this->getDataQualifiers(text, tableName);
 
     // Create regex pattern for the constants (ex: "SPAWN_PALLET_TOWN" or "HEAL_LOCATION_PETALBURG_CITY")
-    QRegularExpression constantsExpr = QRegularExpression("(SPAWN|HEAL_LOCATION)_[A-Za-z0-9_]+");
+    static const QRegularExpression constantsExpr("(SPAWN|HEAL_LOCATION)_[A-Za-z0-9_]+");
 
     // Find all the unique heal location constants used in the data tables.
     // Porymap doesn't care whether or not a constant appeared in the heal locations constants file.
@@ -2292,13 +2316,16 @@ bool Project::readEventScriptLabels() {
 }
 
 QString Project::fixPalettePath(QString path) {
-    path = path.replace(QRegularExpression("\\.gbapal$"), ".pal");
+    static const QRegularExpression re_gbapal("\\.gbapal$");
+    path = path.replace(re_gbapal, ".pal");
     return path;
 }
 
 QString Project::fixGraphicPath(QString path) {
-    path = path.replace(QRegularExpression("\\.lz$"), "");
-    path = path.replace(QRegularExpression("\\.[1248]bpp$"), ".png");
+    static const QRegularExpression re_lz("\\.lz$");
+    path = path.replace(re_lz, "");
+    static const QRegularExpression re_bpp("\\.[1248]bpp$");
+    path = path.replace(re_bpp, ".png");
     return path;
 }
 
@@ -2389,6 +2416,10 @@ bool Project::readEventGraphics() {
 
     QString filepath = projectConfig.getFilePath(ProjectFilePath::data_obj_event_gfx_info);
     const auto gfxInfos = parser.readCStructs(filepath, "", gfxInfoMemberMap);
+
+    QMap<QString, QStringList> picTables = parser.readCArrayMulti(projectConfig.getFilePath(ProjectFilePath::data_obj_event_pic_tables));
+    QMap<QString, QString> graphicIncbins = parser.readCIncbinMulti(projectConfig.getFilePath(ProjectFilePath::data_obj_event_gfx));
+
     for (QString gfxName : gfxNames) {
         EventGraphics * eventGraphics = new EventGraphics;
 
@@ -2403,16 +2434,17 @@ bool Project::readEventGraphics() {
         QString dimensions_label = gfxInfoAttributes.value("oam");
         QString subsprites_label = gfxInfoAttributes.value("subspriteTables");
 
-        QString gfx_label = parser.readCArray(projectConfig.getFilePath(ProjectFilePath::data_obj_event_pic_tables), pic_label).value(0);
-        gfx_label = gfx_label.section(QRegularExpression("[\\(\\)]"), 1, 1);
-        QString path = parser.readCIncbin(projectConfig.getFilePath(ProjectFilePath::data_obj_event_gfx), gfx_label);
+        QString gfx_label = picTables[pic_label].value(0);
+        static const QRegularExpression re_parens("[\\(\\)]");
+        gfx_label = gfx_label.section(re_parens, 1, 1);
+        QString path = graphicIncbins[gfx_label];
 
         if (!path.isNull()) {
             path = fixGraphicPath(path);
             eventGraphics->spritesheet = QImage(root + "/" + path);
             if (!eventGraphics->spritesheet.isNull()) {
                 // Infer the sprite dimensions from the OAM labels.
-                QRegularExpression re("\\S+_(\\d+)x(\\d+)");
+                static const QRegularExpression re("\\S+_(\\d+)x(\\d+)");
                 QRegularExpressionMatch dimensionMatch = re.match(dimensions_label);
                 QRegularExpressionMatch oamTablesMatch = re.match(subsprites_label);
                 if (oamTablesMatch.hasMatch()) {
@@ -2443,8 +2475,9 @@ bool Project::readSpeciesIconPaths() {
     fileWatcher.addPath(root + "/" + srcfilename);
     fileWatcher.addPath(root + "/" + incfilename);
     QMap<QString, QString> monIconNames = parser.readNamedIndexCArray(srcfilename, "gMonIconTable");
+    QMap<QString, QString> iconIncbins = parser.readCIncbinMulti(incfilename);
     for (QString species : monIconNames.keys()) {
-        QString path = parser.readCIncbin(incfilename, monIconNames.value(species));
+        QString path = iconIncbins[monIconNames.value(species)];
         speciesToIconPath.insert(species, root + "/" + path.replace("4bpp", "png"));
     }
     return true;

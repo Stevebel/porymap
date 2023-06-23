@@ -92,7 +92,7 @@ void KeyValueConfigBase::load() {
 
     QTextStream in(&file);
     QList<QString> configLines;
-    QRegularExpression re("^(?<key>[^=]+)=(?<value>.*)$");
+    static const QRegularExpression re("^(?<key>[^=]+)=(?<value>.*)$");
     while (!in.atEnd()) {
         QString line = in.readLine().trimmed();
         int commentIndex = line.indexOf("#");
@@ -153,9 +153,9 @@ int KeyValueConfigBase::getConfigInteger(QString key, QString value, int min, in
     return qMin(max, qMax(min, result));
 }
 
-long KeyValueConfigBase::getConfigLong(QString key, QString value, long min, long max, long defaultValue) {
+uint32_t KeyValueConfigBase::getConfigUint32(QString key, QString value, uint32_t min, uint32_t max, uint32_t defaultValue) {
     bool ok;
-    long result = value.toLong(&ok, 0);
+    uint32_t result = value.toUInt(&ok, 0);
     if (!ok) {
         logWarn(QString("Invalid config value for %1: '%2'. Must be an integer.").arg(key).arg(value));
         return defaultValue;
@@ -246,6 +246,11 @@ void PorymapConfig::parseConfigKeyValue(QString key, QString value) {
         this->textEditorOpenFolder = value;
     } else if (key == "text_editor_goto_line") {
         this->textEditorGotoLine = value;
+    } else if (key == "palette_editor_bit_depth") {
+        this->paletteEditorBitDepth = getConfigInteger(key, value, 15, 24, 24);
+        if (this->paletteEditorBitDepth != 15 && this->paletteEditorBitDepth != 24){
+            this->paletteEditorBitDepth = 24;
+        }
     } else {
         logWarn(QString("Invalid config key found in config file %1: '%2'").arg(this->getConfigFilepath()).arg(key));
     }
@@ -278,6 +283,7 @@ QMap<QString, QString> PorymapConfig::getKeyValueMap() {
     map.insert("theme", this->theme);
     map.insert("text_editor_open_directory", this->textEditorOpenFolder);
     map.insert("text_editor_goto_line", this->textEditorGotoLine);
+    map.insert("palette_editor_bit_depth", QString("%1").arg(this->paletteEditorBitDepth));
     
     return map;
 }
@@ -400,6 +406,11 @@ void PorymapConfig::setTextEditorGotoLine(const QString &command) {
     this->save();
 }
 
+void PorymapConfig::setPaletteEditorBitDepth(int bitDepth) {
+    this->paletteEditorBitDepth = bitDepth;
+    this->save();
+}
+
 QString PorymapConfig::getRecentProject() {
     return this->recentProject;
 }
@@ -498,6 +509,10 @@ QString PorymapConfig::getTextEditorGotoLine() {
     return this->textEditorGotoLine;
 }
 
+int PorymapConfig::getPaletteEditorBitDepth() {
+    return this->paletteEditorBitDepth;
+}
+
 const QMap<BaseGameVersion, QString> baseGameVersionMap = {
     {BaseGameVersion::pokeruby, "pokeruby"},
     {BaseGameVersion::pokefirered, "pokefirered"},
@@ -579,13 +594,13 @@ void ProjectConfig::parseConfigKeyValue(QString key, QString value) {
         }
         this->metatileAttributesSize = size;
     } else if (key == "metatile_behavior_mask") {
-        this->metatileBehaviorMask = getConfigLong(key, value, 0, 0xFFFFFFFF, 0);
+        this->metatileBehaviorMask = getConfigUint32(key, value, 0, 0xFFFFFFFF, 0);
     } else if (key == "metatile_terrain_type_mask") {
-        this->metatileTerrainTypeMask = getConfigLong(key, value, 0, 0xFFFFFFFF, 0);
+        this->metatileTerrainTypeMask = getConfigUint32(key, value, 0, 0xFFFFFFFF, 0);
     } else if (key == "metatile_encounter_type_mask") {
-        this->metatileEncounterTypeMask = getConfigLong(key, value, 0, 0xFFFFFFFF, 0);
+        this->metatileEncounterTypeMask = getConfigUint32(key, value, 0, 0xFFFFFFFF, 0);
     } else if (key == "metatile_layer_type_mask") {
-        this->metatileLayerTypeMask = getConfigLong(key, value, 0, 0xFFFFFFFF, 0);
+        this->metatileLayerTypeMask = getConfigUint32(key, value, 0, 0xFFFFFFFF, 0);
     } else if (key == "enable_map_allow_flags") {
         this->enableMapAllowFlags = getConfigBool(key, value);
 #ifdef CONFIG_BACKWARDS_COMPATABILITY
@@ -1132,7 +1147,7 @@ QString ShortcutsConfig::cfgKey(const QObject *object) const {
         cfg_key = parentWidget->window()->objectName() + '_';
     cfg_key += object->objectName();
 
-    QRegularExpression re("[A-Z]");
+    static const QRegularExpression re("[A-Z]");
     int i = cfg_key.indexOf(re, 1);
     while (i != -1) {
         if (cfg_key.at(i - 1) != '_')

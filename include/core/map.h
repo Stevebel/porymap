@@ -63,7 +63,7 @@ public:
     QPixmap collision_pixmap;
     QImage image;
     QPixmap pixmap;
-    
+
     QMap<Event::Group, QList<Event *>> events;
     QList<Event *> ownedEvents; // for memory management
 
@@ -76,8 +76,8 @@ public:
     int getHeight();
     int getBorderWidth();
     int getBorderHeight();
-    QPixmap render(bool ignoreCache, MapLayout * fromLayout = nullptr);
-    QPixmap renderCollision(qreal opacity, bool ignoreCache);
+    QPixmap render(bool ignoreCache = false, MapLayout *fromLayout = nullptr, QRect bounds = QRect(0, 0, -1, -1));
+    QPixmap renderCollision(bool ignoreCache);
     bool mapBlockChanged(int i, const Blockdata &cache);
     bool borderBlockChanged(int i, const Blockdata &cache);
     void cacheBlockdata();
@@ -99,6 +99,7 @@ public:
     QPixmap renderBorder(bool ignoreCache = false);
     void setDimensions(int newWidth, int newHeight, bool setNewBlockdata = true, bool enableScriptCallback = false);
     void setBorderDimensions(int newWidth, int newHeight, bool setNewBlockdata = true, bool enableScriptCallback = false);
+    void clearBorderCache();
     void cacheBorder();
     bool hasUnsavedChanges();
     bool isWithinBounds(int x, int y);

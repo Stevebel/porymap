@@ -76,6 +76,7 @@ public:
     QStringList bgEventFacingDirections;
     QStringList trainerTypes;
     QStringList globalScriptLabels;
+    QMap<QString, QMap<QString, int>> metatileLabelsMap;
     QMap<QString, int> metatileBehaviorMap;
     QMap<int, QString> metatileBehaviorMapInverse;
     QMap<QString, QString> facingDirections;
@@ -131,7 +132,6 @@ public:
 
     bool readWildMonData();
     tsl::ordered_map<QString, WildPokemonHeader> wildMonData;
-    QVector<QString> timesOfDay;
 
     EncounterGroup encounterGroup;
     QVector<poryjson::Json::object> extraEncounterGroups;
@@ -176,6 +176,7 @@ public:
     void appendTilesetLabel(QString label, QString isSecondaryStr);
     bool readTilesetLabels();
     bool readTilesetProperties();
+    bool readTilesetMetatileLabels();
     bool readMaxMapDataSize();
     bool readRegionMapSections();
     bool readItemNames();

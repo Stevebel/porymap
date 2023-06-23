@@ -7,14 +7,57 @@ and this project somewhat adheres to [Semantic Versioning](https://semver.org/sp
 The **"Breaking Changes"** listed below are changes that have been made in the decompilation projects (e.g. pokeemerald), which porymap requires in order to work properly. It also includes changes to the scripting API that may change the behavior of existing porymap scripts. If porymap is used with a project or API script that is not up-to-date with the breaking changes, then porymap will likely break or behave improperly.
 
 ## [Unreleased]
+### Changed
+- The Palette Editor now remembers the Bit Depth setting.
+
+### Fixed
+- Fix text boxes in the Palette Editor calculating color incorrectly.
+- Fix default object sprites retaining dimensions and transparency of the previous sprite.
+- Fix connections not being deleted when the map name text box is cleared.
+
+## [5.1.1] - 2023-02-20
+### Added
+- Add `registerToggleAction` to the scripting API
+
+### Changed
+- The Palette Editor now remembers the Bit Depth setting.
+
+### Fixed
+- Fix text boxes in the Palette Editor calculating color incorrectly.
+- Fix default object sprites retaining dimensions and transparency of the previous sprite.
+- Fix connections not being deleted when the map name text box is cleared.
+
+## [5.1.1] - 2023-02-20
+### Added
+- Add `registerToggleAction` to the scripting API
+
+### Changed
+- Change encounter tab copy and paste behavior.
+- A warning will appear if a custom script fails to load or an action fails to run.
+
+### Fixed
+- Fix null characters being unpredictably written to some JSON files.
+- Fix tilesets that share part of their name loading incorrectly.
+- Fix events being hidden behind connecting maps.
+- Metatile labels with values defined outside their tileset are no longer deleted.
+- Fix the Tileset Editor retaining edit history after changing tilesets.
+- Fix some minor visual issues on the Connections tab.
+- Fix the updated pokefirered region map graphics appearing in grayscale.
+- Fix the API function `registerAction` not correctly handling actions with the same name.
+
+## [5.1.0] - 2023-01-22
 ### Added
 - Add new config options for reorganizing metatile attributes.
 - Add `setScale` to the scripting API.
 - Add option to turn off the checkerboard fill for new tilesets.
+- Add option to copy wild encounters from another encounters tab.
 
 ### Changed
+- Double-clicking on a connecting map on the Map or Events tabs will now open that map.
 - Hovering on border metatiles with the mouse will now display their information in the bottom bar.
 - The last-used directory is now preserved in import/export file dialogs.
+- Encounter editing has been slightly modified in favor of a more performant ui.
+- Pokémon icons in the encounter editor have their transparency set.
 
 ### Fixed
 - Fix the Region Map Editor being opened by the Shortcuts Editor.
@@ -23,6 +66,8 @@ The **"Breaking Changes"** listed below are changes that have been made in the d
 - Fix crash when importing AdvanceMap metatiles while `enable_triple_layer_metatiles` is enabled.
 - Fix `File -> Open Project` not resolving folder shortcuts.
 - Fix bug where "Requires Itemfinder" checkbox is being checked by wrong data.
+- Fix the map border not immediately reflecting Tileset Editor changes.
+- Fix pasting metatiles in the Tileset Editor not triggering the unsaved changes warning.
 
 ## [5.0.0] - 2022-10-30
 ### Breaking Changes
@@ -364,7 +409,9 @@ The **"Breaking Changes"** listed below are changes that have been made in the d
 ## [1.0.0] - 2018-10-26
 This was the initial release.
 
-[Unreleased]: https://github.com/huderlem/porymap/compare/5.0.0...HEAD
+[Unreleased]: https://github.com/huderlem/porymap/compare/5.1.1...HEAD
+[5.1.1]: https://github.com/huderlem/porymap/compare/5.1.0...5.1.1
+[5.1.0]: https://github.com/huderlem/porymap/compare/5.0.0...5.1.0
 [5.0.0]: https://github.com/huderlem/porymap/compare/4.5.0...5.0.0
 [4.5.0]: https://github.com/huderlem/porymap/compare/4.4.0...4.5.0
 [4.4.0]: https://github.com/huderlem/porymap/compare/4.3.1...4.4.0

@@ -11,6 +11,8 @@
 #include <QMap>
 #include <QRegularExpression>
 
+
+
 enum TokenClass {
     Number,
     Operator,
@@ -40,15 +42,18 @@ public:
 class ParseUtil
 {
 public:
-    ParseUtil() { };
+    ParseUtil();
     void set_root(const QString &dir);
     static QString readTextFile(const QString &path);
+    void invalidateTextFile(const QString &path);
     static int textFileLineCount(const QString &path);
     QList<QStringList> parseAsm(const QString &filename);
     int evaluateDefine(const QString&, const QMap<QString, int>&);
-    QStringList readCArray(const QString &text, const QString &label);
+    QStringList readCArray(const QString &filename, const QString &label);
+    QMap<QString, QStringList> readCArrayMulti(const QString &filename);
     QMap<QString, QString> readNamedIndexCArray(const QString &text, const QString &label);
     QString readCIncbin(const QString &text, const QString &label);
+    QMap<QString, QString> readCIncbinMulti(const QString &filepath);
     QStringList readCIncbinArray(const QString &filename, const QString &label);
     QMap<QString, int> readCDefines(const QString &filename, const QStringList &prefixes, QMap<QString, int> = { });
     QStringList readCDefinesSorted(const QString&, const QStringList&, const QMap<QString, int>& = { });

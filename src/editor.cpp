@@ -7,6 +7,7 @@
 #include "mapsceneeventfilter.h"
 #include "metatile.h"
 #include "montabwidget.h"
+#include "encountertablemodel.h"
 #include "editcommands.h"
 #include "config.h"
 #include "scripting.h"
@@ -86,7 +87,6 @@ void Editor::setEditingMap() {
         displayMapConnections();
         map_item->draw();
         map_item->setVisible(true);
-        setConnectionsVisibility(ui->checkBox_ToggleBorder->isChecked());
     }
     if (collision_item) {
         collision_item->setVisible(false);
@@ -95,7 +95,8 @@ void Editor::setEditingMap() {
         events_group->setVisible(false);
     }
     setBorderItemsVisible(ui->checkBox_ToggleBorder->isChecked());
-    setConnectionItemsVisible(false);
+    setConnectionItemsVisible(ui->checkBox_ToggleBorder->isChecked());
+    setConnectionsEditable(false);
     this->cursorMapTileRect->stopSingleTileMode();
     this->cursorMapTileRect->setActive(true);
 
@@ -108,17 +109,18 @@ void Editor::setEditingCollision() {
         displayMapConnections();
         collision_item->draw();
         collision_item->setVisible(true);
-        setConnectionsVisibility(ui->checkBox_ToggleBorder->isChecked());
     }
     if (map_item) {
         map_item->paintingMode = MapPixmapItem::PaintMode::Metatiles;
-        map_item->setVisible(false);
+        map_item->draw();
+        map_item->setVisible(true);
     }
     if (events_group) {
         events_group->setVisible(false);
     }
     setBorderItemsVisible(ui->checkBox_ToggleBorder->isChecked());
-    setConnectionItemsVisible(false);
+    setConnectionItemsVisible(ui->checkBox_ToggleBorder->isChecked());
+    setConnectionsEditable(false);
     this->cursorMapTileRect->setSingleTileMode();
     this->cursorMapTileRect->setActive(true);
 
@@ -135,13 +137,13 @@ void Editor::setEditingObjects() {
         displayMapConnections();
         map_item->draw();
         map_item->setVisible(true);
-        setConnectionsVisibility(ui->checkBox_ToggleBorder->isChecked());
     }
     if (collision_item) {
         collision_item->setVisible(false);
     }
     setBorderItemsVisible(ui->checkBox_ToggleBorder->isChecked());
-    setConnectionItemsVisible(false);
+    setConnectionItemsVisible(ui->checkBox_ToggleBorder->isChecked());
+    setConnectionsEditable(false);
     this->cursorMapTileRect->setSingleTileMode();
     this->cursorMapTileRect->setActive(false);
 
@@ -172,7 +174,6 @@ void Editor::setEditingConnections() {
         map_item->setVisible(true);
         populateConnectionMapPickers();
         ui->label_NumConnections->setText(QString::number(map->connections.length()));
-        setConnectionsVisibility(false);
         setDiveEmergeControls();
         bool controlsEnabled = selected_connection_item != nullptr;
         setConnectionEditControlsEnabled(controlsEnabled);
@@ -181,6 +182,7 @@ void Editor::setEditingConnections() {
             setConnectionMap(selected_connection_item->connection->map_name);
             setCurrentConnectionDirection(selected_connection_item->connection->direction);
         }
+        maskNonVisibleConnectionTiles();
     }
     if (collision_item) {
         collision_item->setVisible(false);
@@ -190,6 +192,7 @@ void Editor::setEditingConnections() {
     }
     setBorderItemsVisible(true, 0.4);
     setConnectionItemsVisible(true);
+    setConnectionsEditable(true);
     this->cursorMapTileRect->setSingleTileMode();
     this->cursorMapTileRect->setActive(false);
 }
@@ -221,7 +224,7 @@ void Editor::displayWildMonTables() {
         tabWidget->clearTableAt(tabIndex);
 
         if (project->wildMonData.contains(map->constantName) && header.wildMons[fieldName].active) {
-            tabWidget->populateTab(tabIndex, header.wildMons[fieldName], fieldName);
+            tabWidget->populateTab(tabIndex, header.wildMons[fieldName]);
         } else {
             tabWidget->setTabActive(tabIndex, false);
         }
@@ -245,9 +248,9 @@ void Editor::saveEncounterTabData() {
 
         if (!tabWidget->isTabEnabled(fieldIndex++)) continue;
 
-        QTableWidget *monTable = static_cast<QTableWidget *>(tabWidget->widget(fieldIndex - 1));
-        QVector<WildPokemon> newWildMons;
-        encounterHeader.wildMons[fieldName] = copyMonInfoFromTab(monTable);
+        QTableView *monTable = tabWidget->tableAt(fieldIndex - 1);
+        EncounterTableModel *model = static_cast<EncounterTableModel *>(monTable->model());
+        encounterHeader.wildMons[fieldName] = model->encounterData();
     }
 }
 
@@ -285,7 +288,7 @@ void Editor::populateConnectionMapPickers() {
 }
 
 void Editor::setConnectionItemsVisible(bool visible) {
-    for (ConnectionPixmapItem* item : connection_edit_items) {
+    for (ConnectionPixmapItem* item : connection_items) {
         item->setVisible(visible);
         item->setEnabled(visible);
     }
@@ -394,26 +397,20 @@ void Editor::setConnectionEditControlsEnabled(bool enabled) {
     }
 }
 
+void Editor::setConnectionsEditable(bool editable) {
+    for (ConnectionPixmapItem* item : connection_items) {
+        item->setEditable(editable);
+        item->updateHighlight(item == selected_connection_item);
+    }
+}
+
 void Editor::onConnectionItemSelected(ConnectionPixmapItem* connectionItem) {
     if (!connectionItem)
         return;
 
-    for (ConnectionPixmapItem* item : connection_edit_items) {
-        bool isSelectedItem = item == connectionItem;
-        int zValue = isSelectedItem ? 0 : -1;
-        qreal opacity = isSelectedItem ? 1 : 0.75;
-        item->setZValue(zValue);
-        item->render(opacity);
-        if (isSelectedItem) {
-            QPixmap pixmap = item->pixmap();
-            QPainter painter(&pixmap);
-            painter.setPen(QColor(255, 0, 255));
-            painter.drawRect(0, 0, pixmap.width() - 1, pixmap.height() - 1);
-            painter.end();
-            item->setPixmap(pixmap);
-        }
-    }
     selected_connection_item = connectionItem;
+    for (ConnectionPixmapItem* item : connection_items)
+        item->updateHighlight(item == selected_connection_item);
     setConnectionEditControlsEnabled(true);
     setConnectionEditControlValues(selected_connection_item->connection);
     ui->spinBox_ConnectionOffset->setMaximum(selected_connection_item->getMaxOffset());
@@ -423,7 +420,7 @@ void Editor::onConnectionItemSelected(ConnectionPixmapItem* connectionItem) {
 
 void Editor::setSelectedConnectionFromMap(QString mapName) {
     // Search for the first connection that connects to the given map map.
-    for (ConnectionPixmapItem* item : connection_edit_items) {
+    for (ConnectionPixmapItem* item : connection_items) {
         if (item->connection->map_name == mapName) {
             onConnectionItemSelected(item);
             break;
@@ -456,14 +453,13 @@ void Editor::onHoveredMovementPermissionCleared() {
 
 QString Editor::getMetatileDisplayMessage(uint16_t metatileId) {
     Metatile *metatile = Tileset::getMetatile(metatileId, map->layout->tileset_primary, map->layout->tileset_secondary);
+    QString label = Tileset::getMetatileLabel(metatileId, map->layout->tileset_primary, map->layout->tileset_secondary);
     QString hexString = QString("%1").arg(metatileId, 3, 16, QChar('0')).toUpper();
     QString message = QString("Metatile: 0x%1").arg(hexString);
-    if (metatile) {
-        if (metatile->label.size())
-            message += QString(" \"%1\"").arg(metatile->label);
-        if (metatile->behavior) // Skip MB_NORMAL
-            message += QString(", Behavior: %1").arg(this->project->metatileBehaviorMapInverse.value(metatile->behavior, QString::number(metatile->behavior)));
-    }
+    if (label.size())
+        message += QString(" \"%1\"").arg(label);
+    if (metatile && metatile->behavior) // Skip MB_NORMAL
+        message += QString(", Behavior: %1").arg(this->project->metatileBehaviorMapInverse.value(metatile->behavior, QString::number(metatile->behavior)));
     return message;
 }
 
@@ -613,13 +609,6 @@ QString Editor::getMovementPermissionText(uint16_t collision, uint16_t elevation
         message = QString("Collision: Impassable (%1), Elevation: %2").arg(collision).arg(elevation);
     }
     return message;
-}
-
-void Editor::setConnectionsVisibility(bool visible) {
-    for (QGraphicsPixmapItem* item : connection_items) {
-        item->setVisible(visible);
-        item->setActive(visible);
-    }
 }
 
 bool Editor::setMap(QString map_name) {
@@ -1054,8 +1043,6 @@ void Editor::displayMapEvents() {
     }
     //objects_group->setFiltersChildEvents(false);
     events_group->setHandlesChildEvents(false);
-
-    emit objectsChanged();
 }
 
 DraggablePixmapItem *Editor::addMapEvent(Event *event) {
@@ -1066,38 +1053,30 @@ DraggablePixmapItem *Editor::addMapEvent(Event *event) {
 }
 
 void Editor::displayMapConnections() {
-    for (QGraphicsPixmapItem* item : connection_items) {
-        if (item->scene()) {
-            item->scene()->removeItem(item);
-        }
-        delete item;
-    }
-    connection_items.clear();
-
-    for (ConnectionPixmapItem* item : connection_edit_items) {
+    for (ConnectionPixmapItem* item : connection_items) {
         if (item->scene()) {
             item->scene()->removeItem(item);
         }
         delete item;
     }
     selected_connection_item = nullptr;
-    connection_edit_items.clear();
+    connection_items.clear();
 
     for (MapConnection *connection : map->connections) {
         if (connection->direction == "dive" || connection->direction == "emerge") {
             continue;
         }
-        createConnectionItem(connection, false);
+        createConnectionItem(connection);
     }
 
-    if (!connection_edit_items.empty()) {
-        onConnectionItemSelected(connection_edit_items.first());
+    if (!connection_items.empty()) {
+        onConnectionItemSelected(connection_items.first());
     }
 
     maskNonVisibleConnectionTiles();
 }
 
-void Editor::createConnectionItem(MapConnection* connection, bool hide) {
+void Editor::createConnectionItem(MapConnection* connection) {
     Map *connected_map = project->getMap(connection->map_name);
     if (!connected_map) {
         return;
@@ -1120,26 +1099,15 @@ void Editor::createConnectionItem(MapConnection* connection, bool hide) {
         y = offset * 16;
     }
 
-    QGraphicsPixmapItem *item = new QGraphicsPixmapItem(pixmap);
-    item->setZValue(-1);
+    ConnectionPixmapItem *item = new ConnectionPixmapItem(pixmap, connection, x, y, map->getWidth(), map->getHeight());
     item->setX(x);
     item->setY(y);
+    item->setZValue(-1);
     scene->addItem(item);
+    connect(item, &ConnectionPixmapItem::connectionMoved, this, &Editor::onConnectionMoved);
+    connect(item, &ConnectionPixmapItem::connectionItemSelected, this, &Editor::onConnectionItemSelected);
+    connect(item, &ConnectionPixmapItem::connectionItemDoubleClicked, this, &Editor::onConnectionItemDoubleClicked);
     connection_items.append(item);
-    item->setVisible(!hide);
-
-    ConnectionPixmapItem *connection_edit_item = new ConnectionPixmapItem(pixmap, connection, x, y, map->getWidth(), map->getHeight());
-    connection_edit_item->setX(x);
-    connection_edit_item->setY(y);
-    connection_edit_item->setZValue(-1);
-    scene->addItem(connection_edit_item);
-    connect(connection_edit_item, &ConnectionPixmapItem::connectionMoved,
-            this, &Editor::onConnectionMoved);
-    connect(connection_edit_item, &ConnectionPixmapItem::connectionItemSelected,
-            this, &Editor::onConnectionItemSelected);
-    connect(connection_edit_item, &ConnectionPixmapItem::connectionItemDoubleClicked,
-            this, &Editor::onConnectionItemDoubleClicked);
-    connection_edit_items.append(connection_edit_item);
 }
 
 // Hides connected map tiles that cannot be seen from the current map (beyond BORDER_DISTANCE).
@@ -1149,6 +1117,7 @@ void Editor::maskNonVisibleConnectionTiles() {
             connection_mask->scene()->removeItem(connection_mask);
         }
         delete connection_mask;
+        connection_mask = nullptr;
     }
 
     QPainterPath mask;
@@ -1186,7 +1155,7 @@ void Editor::displayMapBorder() {
         QGraphicsPixmapItem *item = new QGraphicsPixmapItem(pixmap);
         item->setX(x * 16);
         item->setY(y * 16);
-        item->setZValue(-2);
+        item->setZValue(-3);
         scene->addItem(item);
         borderItems.append(item);
     }
@@ -1200,18 +1169,14 @@ void Editor::updateMapBorder() {
 }
 
 void Editor::updateMapConnections() {
-    if (connection_items.size() != connection_edit_items.size())
-        return;
-
     for (int i = 0; i < connection_items.size(); i++) {
-        Map *connected_map = project->getMap(connection_edit_items[i]->connection->map_name);
+        Map *connected_map = project->getMap(connection_items[i]->connection->map_name);
         if (!connected_map)
             continue;
 
-        QPixmap pixmap = connected_map->renderConnection(*(connection_edit_items[i]->connection), map->layout);
+        QPixmap pixmap = connected_map->renderConnection(*(connection_items[i]->connection), map->layout);
+        connection_items[i]->basePixmap = pixmap;
         connection_items[i]->setPixmap(pixmap);
-        connection_edit_items[i]->basePixmap = pixmap;
-        connection_edit_items[i]->setPixmap(pixmap);
     }
 
     maskNonVisibleConnectionTiles();
@@ -1331,8 +1296,8 @@ void Editor::addNewConnection() {
     newConnection->offset = 0;
     newConnection->map_name = defaultMapName;
     map->connections.append(newConnection);
-    createConnectionItem(newConnection, true);
-    onConnectionItemSelected(connection_edit_items.last());
+    createConnectionItem(newConnection);
+    onConnectionItemSelected(connection_items.last());
     ui->label_NumConnections->setText(QString::number(map->connections.length()));
 
     updateMirroredConnection(newConnection, newConnection->direction, newConnection->map_name);
@@ -1404,7 +1369,7 @@ void Editor::removeCurrentConnection() {
         return;
 
     map->connections.removeOne(selected_connection_item->connection);
-    connection_edit_items.removeOne(selected_connection_item);
+    connection_items.removeOne(selected_connection_item);
     removeMirroredConnection(selected_connection_item->connection);
 
     if (selected_connection_item && selected_connection_item->scene()) {
@@ -1417,8 +1382,8 @@ void Editor::removeCurrentConnection() {
     ui->spinBox_ConnectionOffset->setValue(0);
     ui->label_NumConnections->setText(QString::number(map->connections.length()));
 
-    if (connection_edit_items.length() > 0) {
-        onConnectionItemSelected(connection_edit_items.last());
+    if (connection_items.length() > 0) {
+        onConnectionItemSelected(connection_items.last());
     }
 }
 
@@ -1489,7 +1454,7 @@ void Editor::updateSecondaryTileset(QString tilesetLabel, bool forceLoad)
 void Editor::toggleBorderVisibility(bool visible, bool enableScriptCallback)
 {
     this->setBorderItemsVisible(visible);
-    this->setConnectionsVisibility(visible);
+    this->setConnectionItemsVisible(visible);
     porymapConfig.setShowBorder(visible);
     if (enableScriptCallback)
         Scripting::cb_BorderVisibilityToggled(visible);

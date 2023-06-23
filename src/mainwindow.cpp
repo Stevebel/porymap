@@ -17,6 +17,7 @@
 #include "shortcut.h"
 #include "mapparser.h"
 #include "prefab.h"
+#include "montabwidget.h"
 
 #include <QFileDialog>
 #include <QClipboard>
@@ -898,6 +899,7 @@ bool MainWindow::loadDataStructures() {
                 && project->readMetatileBehaviors()
                 && project->readTilesetProperties()
                 && project->readTilesetLabels()
+                && project->readTilesetMetatileLabels()
                 && project->readMaxMapDataSize()
                 && project->readHealLocations()
                 && project->readMiscellaneousConstants()
@@ -1240,11 +1242,11 @@ void MainWindow::on_actionNew_Tileset_triggered() {
         newSet.metatiles_path = fullDirectoryPath + "/metatiles.bin";
         newSet.metatile_attrs_path = fullDirectoryPath + "/metatile_attributes.bin";
         newSet.is_secondary = createTilesetDialog->isSecondary;
-        int numMetaTiles = createTilesetDialog->isSecondary ? (Project::getNumTilesTotal() - Project::getNumTilesPrimary()) : Project::getNumTilesPrimary();
+        int numMetatiles = createTilesetDialog->isSecondary ? (Project::getNumMetatilesTotal() - Project::getNumMetatilesPrimary()) : Project::getNumMetatilesPrimary();
         QImage tilesImage(":/images/blank_tileset.png");
         editor->project->loadTilesetTiles(&newSet, tilesImage);
         int tilesPerMetatile = projectConfig.getNumTilesInMetatile();
-        for(int i = 0; i < numMetaTiles; ++i) {
+        for(int i = 0; i < numMetatiles; ++i) {
             Metatile *mt = new Metatile();
             for(int j = 0; j < tilesPerMetatile; ++j){
                 Tile tile = Tile();
@@ -1435,7 +1437,8 @@ void MainWindow::copy() {
             copyObject["height"] = editor->metatile_selector_item->getSelectionDimensions().y();
             setClipboardData(copyObject);
             logInfo("Copied metatile selection to clipboard");
-        } else if (objectName == "graphicsView_Map") {
+        }
+        else if (objectName == "graphicsView_Map") {
             // which tab are we in?
             switch (ui->mainTabBar->currentIndex())
             {
@@ -1489,6 +1492,13 @@ void MainWindow::copy() {
             }
             }
         }
+        else if (this->ui->mainTabBar->currentIndex() == 4) {
+            QWidget *w = this->ui->stackedWidget_WildMons->currentWidget();
+            if (w) {
+                MonTabWidget *mtw = static_cast<MonTabWidget *>(w);
+                mtw->copy(mtw->currentIndex());
+            }
+        }
     }
 }
 
@@ -1513,8 +1523,15 @@ void MainWindow::paste() {
     QClipboard *clipboard = QGuiApplication::clipboard();
     QString clipboardText(clipboard->text());
 
-
-    if (!clipboardText.isEmpty()) {
+    if (ui->mainTabBar->currentIndex() == 4) {
+        QWidget *w = this->ui->stackedWidget_WildMons->currentWidget();
+        if (w) {
+            w->setFocus();
+            MonTabWidget *mtw = static_cast<MonTabWidget *>(w);
+            mtw->paste(mtw->currentIndex());
+        }
+    }
+    else if (!clipboardText.isEmpty()) {
         // we only can paste json text
         // so, check if clipboard text is valid json
         QString parseError;
@@ -1929,6 +1946,7 @@ void MainWindow::updateSelectedObjects() {
 
             selectedObject = current->getPixmapItem();
 
+            QSignalBlocker b(this->ui->spinner_ObjectID);
             this->ui->spinner_ObjectID->setMinimum(event_offs);
             this->ui->spinner_ObjectID->setMaximum(current->getMap()->events.value(eventGroup).length() + event_offs - 1);
             this->ui->spinner_ObjectID->setValue(current->getEventIndex() + event_offs);
@@ -1941,6 +1959,7 @@ void MainWindow::updateSelectedObjects() {
 
             selectedWarp = current->getPixmapItem();
 
+            QSignalBlocker b(this->ui->spinner_WarpID);
             this->ui->spinner_WarpID->setMinimum(event_offs);
             this->ui->spinner_WarpID->setMaximum(current->getMap()->events.value(eventGroup).length() + event_offs - 1);
             this->ui->spinner_WarpID->setValue(current->getEventIndex() + event_offs);
@@ -1953,6 +1972,7 @@ void MainWindow::updateSelectedObjects() {
 
             selectedTrigger = current->getPixmapItem();
 
+            QSignalBlocker b(this->ui->spinner_TriggerID);
             this->ui->spinner_TriggerID->setMinimum(event_offs);
             this->ui->spinner_TriggerID->setMaximum(current->getMap()->events.value(eventGroup).length() + event_offs - 1);
             this->ui->spinner_TriggerID->setValue(current->getEventIndex() + event_offs);
@@ -1965,6 +1985,7 @@ void MainWindow::updateSelectedObjects() {
 
             selectedBG = current->getPixmapItem();
 
+            QSignalBlocker b(this->ui->spinner_BgID);
             this->ui->spinner_BgID->setMinimum(event_offs);
             this->ui->spinner_BgID->setMaximum(current->getMap()->events.value(eventGroup).length() + event_offs - 1);
             this->ui->spinner_BgID->setValue(current->getEventIndex() + event_offs);
@@ -1977,6 +1998,7 @@ void MainWindow::updateSelectedObjects() {
 
             selectedHealspot = current->getPixmapItem();
 
+            QSignalBlocker b(this->ui->spinner_HealID);
             this->ui->spinner_HealID->setMinimum(event_offs);
             this->ui->spinner_HealID->setMaximum(current->getMap()->events.value(eventGroup).length() + event_offs - 1);
             this->ui->spinner_HealID->setValue(current->getEventIndex() + event_offs);
@@ -2356,11 +2378,14 @@ void MainWindow::onTilesetsSaved(QString primaryTilesetLabel, QString secondaryT
     } else {
         this->editor->project->getTileset(secondaryTilesetLabel, true);
     }
-    if (updated)
+    if (updated) {
+        this->editor->map->clearBorderCache();
         redrawMapScene();
+    }
 }
 
 void MainWindow::onWildMonDataChanged() {
+    editor->saveEncounterTabData();
     markMapEdited();
 }
 
@@ -2458,7 +2483,7 @@ void MainWindow::on_spinBox_ConnectionOffset_valueChanged(int offset)
 
 void MainWindow::on_comboBox_ConnectedMap_currentTextChanged(const QString &mapName)
 {
-    if (editor->project->mapNames.contains(mapName)) {
+    if (mapName.isEmpty() || editor->project->mapNames.contains(mapName)) {
         editor->setConnectionMap(mapName);
         markMapEdited();
     }
@@ -2478,7 +2503,7 @@ void MainWindow::on_pushButton_RemoveConnection_clicked()
 
 void MainWindow::on_comboBox_DiveMap_currentTextChanged(const QString &mapName)
 {
-    if (editor->project->mapNames.contains(mapName)) {
+    if (mapName.isEmpty() || editor->project->mapNames.contains(mapName)) {
         editor->updateDiveMap(mapName);
         markMapEdited();
     }
@@ -2486,7 +2511,7 @@ void MainWindow::on_comboBox_DiveMap_currentTextChanged(const QString &mapName)
 
 void MainWindow::on_comboBox_EmergeMap_currentTextChanged(const QString &mapName)
 {
-    if (editor->project->mapNames.contains(mapName)) {
+    if (mapName.isEmpty() || editor->project->mapNames.contains(mapName)) {
         editor->updateEmergeMap(mapName);
         markMapEdited();
     }
