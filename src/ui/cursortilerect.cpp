@@ -73,6 +73,11 @@ void CursorTileRect::setStraightPathMode(bool enable)
     this->straightPathMode = enable;
 }
 
+void CursorTileRect::setRandomTileMode(bool enable)
+{
+    this->randomTileMode = enable;
+}
+
 void CursorTileRect::setSingleTileMode()
 {
     this->singleTileMode = true;
@@ -90,7 +95,7 @@ bool CursorTileRect::smartPathInEffect()
 
 void CursorTileRect::updateLocation(int coordX, int coordY)
 {
-    if (!this->singleTileMode) {
+    if (!this->singleTileMode && !this->randomTileMode) {
         if (this->rightClickSelectionAnchored) {
             coordX = qMin(coordX, this->anchorCoordX);
             coordY = qMin(coordY, this->anchorCoordY);

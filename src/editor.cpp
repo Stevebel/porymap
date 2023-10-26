@@ -692,6 +692,14 @@ void Editor::setStraightPathCursorMode(QGraphicsSceneMouseEvent *event) {
     }
 }
 
+void Editor::setRandomCursorMode(QGraphicsSceneMouseEvent *event) {
+    if (event->modifiers() & Qt::AltModifier) {
+        this->cursorMapTileRect->setRandomTileMode(true);
+    } else {
+        this->cursorMapTileRect->setRandomTileMode(false);
+    }
+}
+
 void Editor::mouseEvent_map(QGraphicsSceneMouseEvent *event, MapPixmapItem *item) {
     // TODO: add event tab object painting tool buttons stuff here
     if (item->paintingMode == MapPixmapItem::PaintMode::Disabled) {
@@ -717,6 +725,7 @@ void Editor::mouseEvent_map(QGraphicsSceneMouseEvent *event, MapPixmapItem *item
                 }
                 this->setSmartPathCursorMode(event);
                 this->setStraightPathCursorMode(event);
+                this->setRandomCursorMode(event);
                 if (this->cursorMapTileRect->getStraightPathMode()) {
                     item->lockNondominantAxis(event);
                     pos = item->adjustCoords(pos);

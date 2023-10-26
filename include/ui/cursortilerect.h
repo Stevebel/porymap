@@ -13,7 +13,7 @@ public:
     {
         int width = this->width;
         int height = this->height;
-        if (this->singleTileMode) {
+        if (this->singleTileMode || this->randomTileMode) {
             width = 16;
             height = 16;
         } else if (!this->rightClickSelectionAnchored && this->smartPathMode && this->selectionHeight == 3 && this->selectionWidth == 3) {
@@ -32,7 +32,7 @@ public:
         if (!(*enabled)) return;
         int width = this->width;
         int height = this->height;
-        if (this->singleTileMode) {
+        if (this->singleTileMode || this->randomTileMode) {
             width = 16;
             height = 16;
         } else if (this->smartPathInEffect()) {
@@ -54,6 +54,8 @@ public:
     bool getSmartPathMode() { return this->smartPathMode; }
     void setStraightPathMode(bool enable);
     bool getStraightPathMode() { return this->straightPathMode; }
+    void setRandomTileMode(bool enable);
+    bool getRandomTileMode() { return this->randomTileMode; }
     void setSingleTileMode();
     void stopSingleTileMode();
     void updateLocation(int x, int y);
@@ -69,6 +71,7 @@ private:
     bool rightClickSelectionAnchored;
     bool smartPathMode;
     bool straightPathMode;
+    bool randomTileMode;
     bool singleTileMode;
     int anchorCoordX;
     int anchorCoordY;

@@ -25,17 +25,25 @@ void MapPixmapItem::paint(QGraphicsSceneMouseEvent *event) {
 
             // Paint onto the map.
             bool shiftPressed = event->modifiers() & Qt::ShiftModifier;
+            bool altPressed = event->modifiers() & Qt::AltModifier;
             QPoint selectionDimensions = this->metatileSelector->getSelectionDimensions();
             if (settings->smartPathsEnabled) {
                 if (!shiftPressed && selectionDimensions.x() == 3 && selectionDimensions.y() == 3) {
                     paintSmartPath(pos.x(), pos.y());
-                } else {
+                }
+                else if (altPressed && (selectionDimensions.x() > 1 || selectionDimensions.y() > 1)) {
+                    paintRandom(pos.x(), pos.y());
+                }
+                else {
                     paintNormal(pos.x(), pos.y());
                 }
             } else {
                 if (shiftPressed && selectionDimensions.x() == 3 && selectionDimensions.y() == 3) {
                     paintSmartPath(pos.x(), pos.y());
-                } else {
+                } else if (altPressed && (selectionDimensions.x() > 1 || selectionDimensions.y() > 1)) {
+                    paintRandom(pos.x(), pos.y());
+                }
+                else {
                     paintNormal(pos.x(), pos.y());
                 }
             }
@@ -140,6 +148,39 @@ void MapPixmapItem::paintNormal(int x, int y, bool fromScriptCall) {
     }
 
     if (!fromScriptCall && map->layout->blockdata != oldMetatiles) {
+        map->editHistory.push(new PaintMetatile(map, oldMetatiles, map->layout->blockdata, actionId_));
+    }
+}
+
+void MapPixmapItem::paintRandom(int x, int y, bool fromScriptCall)
+{
+    MetatileSelection selection = this->metatileSelector->getMetatileSelection();
+    int actualX = x;
+    int actualY = y;
+
+    // for edit history
+    Blockdata oldMetatiles = !fromScriptCall ? map->layout->blockdata : Blockdata();
+
+    Block block;
+    if (map->getBlock(actualX, actualY, &block))
+    {
+        int randomIndex = rand() % selection.metatileItems.length();
+        MetatileSelectionItem item = selection.metatileItems.at(randomIndex);
+        if (item.enabled)
+        {
+            block.metatileId = item.metatileId;
+            if (selection.hasCollision && selection.collisionItems.length() == selection.metatileItems.length())
+            {
+                CollisionSelectionItem collisionItem = selection.collisionItems.at(randomIndex);
+                block.collision = collisionItem.collision;
+                block.elevation = collisionItem.elevation;
+            }
+            map->setBlock(actualX, actualY, block, !fromScriptCall);
+        }
+    }
+
+    if (!fromScriptCall && map->layout->blockdata != oldMetatiles)
+    {
         map->editHistory.push(new PaintMetatile(map, oldMetatiles, map->layout->blockdata, actionId_));
     }
 }
