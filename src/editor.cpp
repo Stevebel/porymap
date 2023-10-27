@@ -454,8 +454,7 @@ void Editor::onHoveredMovementPermissionCleared() {
 QString Editor::getMetatileDisplayMessage(uint16_t metatileId) {
     Metatile *metatile = Tileset::getMetatile(metatileId, map->layout->tileset_primary, map->layout->tileset_secondary);
     QString label = Tileset::getMetatileLabel(metatileId, map->layout->tileset_primary, map->layout->tileset_secondary);
-    QString hexString = QString("%1").arg(metatileId, 3, 16, QChar('0')).toUpper();
-    QString message = QString("Metatile: 0x%1").arg(hexString);
+    QString message = QString("Metatile: %1").arg(Metatile::getMetatileIdString(metatileId));
     if (label.size())
         message += QString(" \"%1\"").arg(label);
     if (metatile && metatile->behavior) // Skip MB_NORMAL
@@ -1448,6 +1447,7 @@ void Editor::updatePrimaryTileset(QString tilesetLabel, bool forceLoad)
     {
         map->layout->tileset_primary_label = tilesetLabel;
         map->layout->tileset_primary = project->getTileset(tilesetLabel, forceLoad);
+        map->clearBorderCache();
     }
 }
 
@@ -1457,6 +1457,7 @@ void Editor::updateSecondaryTileset(QString tilesetLabel, bool forceLoad)
     {
         map->layout->tileset_secondary_label = tilesetLabel;
         map->layout->tileset_secondary = project->getTileset(tilesetLabel, forceLoad);
+        map->clearBorderCache();
     }
 }
 
@@ -1675,7 +1676,7 @@ void Editor::openScript(const QString &scriptLabel) const {
     openInTextEditor(scriptPath, lineNum);
 }
 
-void Editor::openInTextEditor(const QString &path, int lineNum) const {
+void Editor::openInTextEditor(const QString &path, int lineNum) {
     QString command = porymapConfig.getTextEditorGotoLine();
     if (command.isEmpty()) {
         // Open map scripts in the system's default editor.
@@ -1688,7 +1689,7 @@ void Editor::openInTextEditor(const QString &path, int lineNum) const {
         } else {
             command += " \"" + path + '\"';
         }
-        startDetachedProcess(command);
+        Editor::startDetachedProcess(command);
     }
 }
 
@@ -1701,7 +1702,7 @@ void Editor::openProjectInTextEditor() const {
     startDetachedProcess(command);
 }
 
-bool Editor::startDetachedProcess(const QString &command, const QString &workingDirectory, qint64 *pid) const {
+bool Editor::startDetachedProcess(const QString &command, const QString &workingDirectory, qint64 *pid) {
     logInfo("Executing command: " + command);
     QProcess process;
 #ifdef Q_OS_WIN

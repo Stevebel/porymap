@@ -18,6 +18,7 @@
 #include "mapparser.h"
 #include "prefab.h"
 #include "montabwidget.h"
+#include "imageexport.h"
 
 #include <QFileDialog>
 #include <QClipboard>
@@ -361,13 +362,11 @@ void MainWindow::markMapEdited() {
 }
 
 void MainWindow::setWildEncountersUIEnabled(bool enabled) {
-    ui->actionUse_Encounter_Json->setChecked(enabled);
     ui->mainTabBar->setTabEnabled(4, enabled);
 }
 
 void MainWindow::setProjectSpecificUIVisibility()
 {
-    ui->actionUse_Poryscript->setChecked(projectConfig.getUsePoryScript());
     this->setWildEncountersUIEnabled(userConfig.getEncounterJsonActive());
 
     bool hasFlags = projectConfig.getMapAllowFlagsEnabled();
@@ -446,8 +445,6 @@ void MainWindow::loadUserSettings() {
     ui->horizontalSlider_MetatileZoom->blockSignals(true);
     ui->horizontalSlider_MetatileZoom->setValue(porymapConfig.getMetatilesZoom());
     ui->horizontalSlider_MetatileZoom->blockSignals(false);
-    ui->actionMonitor_Project_Files->setChecked(porymapConfig.getMonitorFiles());
-    ui->actionOpen_Recent_Project_On_Launch->setChecked(porymapConfig.getReopenOnLaunch());
     setTheme(porymapConfig.getTheme());
 }
 
@@ -476,12 +473,18 @@ bool MainWindow::openRecentProject() {
         return false;
 
     QString default_dir = porymapConfig.getRecentProject();
-    if (!default_dir.isNull() && default_dir.length() > 0) {
-        logInfo(QString("Opening recent project: '%1'").arg(default_dir));
-        return openProject(default_dir);
+    if (default_dir.isNull() || default_dir.length() <= 0)
+        return false;
+
+    if (!QDir(default_dir).exists()) {
+        QString message = QString("Recent project directory '%1' doesn't exist.").arg(QDir::toNativeSeparators(default_dir));
+        logWarn(message);
+        this->statusBar()->showMessage(message);
+        return false;
     }
 
-    return false;
+    logInfo(QString("Opening recent project: '%1'").arg(default_dir));
+    return openProject(default_dir);
 }
 
 bool MainWindow::openProject(QString dir) {
@@ -512,8 +515,11 @@ bool MainWindow::openProject(QString dir) {
         QObject::connect(editor->project, &Project::reloadProject, this, &MainWindow::on_action_Reload_Project_triggered);
         QObject::connect(editor->project, &Project::mapCacheCleared, this, &MainWindow::onMapCacheCleared);
         QObject::connect(editor->project, &Project::disableWildEncountersUI, [this]() { this->setWildEncountersUIEnabled(false); });
-        QObject::connect(editor->project, &Project::uncheckMonitorFilesAction, [this]() { ui->actionMonitor_Project_Files->setChecked(false); });
-        on_actionMonitor_Project_Files_triggered(porymapConfig.getMonitorFiles());
+        QObject::connect(editor->project, &Project::uncheckMonitorFilesAction, [this]() {
+            porymapConfig.setMonitorFiles(false);
+            if (this->preferenceEditor)
+                this->preferenceEditor->updateFields();
+        });
         editor->project->set_root(dir);
         success = loadDataStructures()
                && populateMapList()
@@ -576,6 +582,19 @@ QString MainWindow::getDefaultMap() {
         }
     }
     return QString();
+}
+
+void MainWindow::openSubWindow(QWidget * window) {
+    if (!window) return;
+
+    if (!window->isVisible()) {
+        window->show();
+    } else if (window->isMinimized()) {
+        window->showNormal();
+    } else {
+        window->raise();
+        window->activateWindow();
+    }
 }
 
 QString MainWindow::getExistingDirectory(QString dir) {
@@ -1172,12 +1191,9 @@ void MainWindow::openNewMapPopupWindow() {
     if (!this->newMapPrompt) {
         this->newMapPrompt = new NewMapPopup(this, this->editor->project);
     }
-    if (!this->newMapPrompt->isVisible()) {
-        this->newMapPrompt->show();
-    } else {
-        this->newMapPrompt->raise();
-        this->newMapPrompt->activateWindow();
-    }
+
+    openSubWindow(this->newMapPrompt);
+
     connect(this->newMapPrompt, &NewMapPopup::applied, this, &MainWindow::onNewMapCreated);
     this->newMapPrompt->setAttribute(Qt::WA_DeleteOnClose);
 }
@@ -1273,7 +1289,7 @@ void MainWindow::on_actionNew_Tileset_triggered() {
         }
         newSet.palettes[0][1] = qRgb(255,0,255);
         newSet.palettePreviews[0][1] = qRgb(255,0,255);
-        editor->project->saveTilesetTilesImage(&newSet);
+        exportIndexed4BPPPng(newSet.tilesImage, newSet.tilesImagePath);
         editor->project->saveTilesetMetatiles(&newSet);
         editor->project->saveTilesetMetatileAttributes(&newSet);
         editor->project->saveTilesetPalettes(&newSet);
@@ -1666,7 +1682,12 @@ void MainWindow::on_mapViewTab_tabBarClicked(int index)
         editor->setEditingCollision();
     } else if (index == 2) {
         editor->setEditingMap();
-        prefab.tryImportDefaultPrefabs(this->editor->map);
+        if (projectConfig.getPrefabFilepath().isEmpty() && !projectConfig.getPrefabImportPrompted()) {
+            // User hasn't set up prefabs and hasn't been prompted before.
+            // Ask if they'd like to import the default prefabs file.
+            if (prefab.tryImportDefaultPrefabs(this, projectConfig.getBaseGameVersion()))
+                prefab.updatePrefabUi(this->editor->map);
+        } 
     }
     editor->setCursorRectVisible(false);
 }
@@ -1743,43 +1764,12 @@ void MainWindow::on_actionCursor_Tile_Outline_triggered()
     }
 }
 
-void MainWindow::on_actionUse_Encounter_Json_triggered(bool checked)
-{
-    QMessageBox warning(this);
-    warning.setText("You must reload the project for this setting to take effect.");
-    warning.setIcon(QMessageBox::Information);
-    warning.exec();
-    userConfig.setEncounterJsonActive(checked);
-}
-
-void MainWindow::on_actionMonitor_Project_Files_triggered(bool checked)
-{
-    porymapConfig.setMonitorFiles(checked);
-}
-
-void MainWindow::on_actionUse_Poryscript_triggered(bool checked)
-{
-    projectConfig.setUsePoryScript(checked);
-}
-
-void MainWindow::on_actionOpen_Recent_Project_On_Launch_triggered(bool checked)
-{
-    porymapConfig.setReopenOnLaunch(checked);
-}
-
-void MainWindow::on_actionEdit_Shortcuts_triggered()
+void MainWindow::on_actionShortcuts_triggered()
 {
     if (!shortcutsEditor)
         initShortcutsEditor();
 
-    if (shortcutsEditor->isHidden()) {
-        shortcutsEditor->show();
-    } else if (shortcutsEditor->isMinimized()) {
-        shortcutsEditor->showNormal();
-    } else {
-        shortcutsEditor->raise();
-        shortcutsEditor->activateWindow();
-    }
+    openSubWindow(shortcutsEditor);
 }
 
 void MainWindow::initShortcutsEditor() {
@@ -1805,6 +1795,11 @@ void MainWindow::connectSubEditorsToShortcutsEditor() {
     if (regionMapEditor)
         connect(shortcutsEditor, &ShortcutsEditor::shortcutsSaved,
                 regionMapEditor, &RegionMapEditor::applyUserShortcuts);
+
+    if (!customScriptsEditor)
+        initCustomScriptsEditor();
+    connect(shortcutsEditor, &ShortcutsEditor::shortcutsSaved,
+            customScriptsEditor, &CustomScriptsEditor::applyUserShortcuts);
 }
 
 void MainWindow::on_actionPencil_triggered()
@@ -2198,7 +2193,7 @@ void MainWindow::on_toolButton_Paint_clicked()
     editor->settings->mapCursor = QCursor(QPixmap(":/icons/pencil_cursor.ico"), 10, 10);
 
     // do not stop single tile mode when editing collision
-    if (ui->mapViewTab->currentIndex() == 0)
+    if (ui->mapViewTab->currentIndex() != 1)
         editor->cursorMapTileRect->stopSingleTileMode();
 
     ui->graphicsView_Map->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -2378,10 +2373,8 @@ void MainWindow::onTilesetsSaved(QString primaryTilesetLabel, QString secondaryT
     } else {
         this->editor->project->getTileset(secondaryTilesetLabel, true);
     }
-    if (updated) {
-        this->editor->map->clearBorderCache();
+    if (updated)
         redrawMapScene();
-    }
 }
 
 void MainWindow::onWildMonDataChanged() {
@@ -2460,13 +2453,7 @@ void MainWindow::showExportMapImageWindow(ImageExporterMode mode) {
     this->mapImageExporter = new MapImageExporter(this, this->editor, mode);
     this->mapImageExporter->setAttribute(Qt::WA_DeleteOnClose);
 
-    if (!this->mapImageExporter->isVisible()) {
-        this->mapImageExporter->show();
-    } else if (this->mapImageExporter->isMinimized()) {
-        this->mapImageExporter->showNormal();
-    } else {
-        this->mapImageExporter->activateWindow();
-    }
+    openSubWindow(this->mapImageExporter);
 }
 
 void MainWindow::on_comboBox_ConnectionDirection_currentTextChanged(const QString &direction)
@@ -2650,14 +2637,7 @@ void MainWindow::on_actionTileset_Editor_triggered()
         initTilesetEditor();
     }
 
-    if (!this->tilesetEditor->isVisible()) {
-        this->tilesetEditor->show();
-    } else if (this->tilesetEditor->isMinimized()) {
-        this->tilesetEditor->showNormal();
-    } else {
-        this->tilesetEditor->raise();
-        this->tilesetEditor->activateWindow();
-    }
+    openSubWindow(this->tilesetEditor);
 
     MetatileSelection selection = this->editor->metatile_selector_item->getMetatileSelection();
     this->tilesetEditor->selectMetatile(selection.metatileItems.first().metatileId);
@@ -2699,7 +2679,7 @@ void MainWindow::on_actionOpen_Config_Folder_triggered() {
     QDesktopServices::openUrl(QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
 }
 
-void MainWindow::on_actionEdit_Preferences_triggered() {
+void MainWindow::on_actionPreferences_triggered() {
     if (!preferenceEditor) {
         preferenceEditor = new PreferenceEditor(this);
         connect(preferenceEditor, &PreferenceEditor::themeChanged,
@@ -2710,14 +2690,7 @@ void MainWindow::on_actionEdit_Preferences_triggered() {
                 this, &MainWindow::togglePreferenceSpecificUi);
     }
 
-    if (!preferenceEditor->isVisible()) {
-        preferenceEditor->show();
-    } else if (preferenceEditor->isMinimized()) {
-        preferenceEditor->showNormal();
-    } else {
-        preferenceEditor->raise();
-        preferenceEditor->activateWindow();
-    }
+    openSubWindow(preferenceEditor);
 }
 
 void MainWindow::togglePreferenceSpecificUi() {
@@ -2725,6 +2698,39 @@ void MainWindow::togglePreferenceSpecificUi() {
         ui->actionOpen_Project_in_Text_Editor->setEnabled(false);
     else
         ui->actionOpen_Project_in_Text_Editor->setEnabled(true);
+}
+
+void MainWindow::on_actionProject_Settings_triggered() {
+    if (!this->projectSettingsEditor) {
+        this->projectSettingsEditor = new ProjectSettingsEditor(this, this->editor->project);
+        connect(this->projectSettingsEditor, &ProjectSettingsEditor::reloadProject,
+                this, &MainWindow::on_action_Reload_Project_triggered);
+    }
+
+    openSubWindow(this->projectSettingsEditor);
+}
+
+void MainWindow::on_actionCustom_Scripts_triggered() {
+    if (!this->customScriptsEditor)
+        initCustomScriptsEditor();
+
+    openSubWindow(this->customScriptsEditor);
+}
+
+void MainWindow::initCustomScriptsEditor() {
+    this->customScriptsEditor = new CustomScriptsEditor(this);
+    connect(this->customScriptsEditor, &CustomScriptsEditor::reloadScriptEngine,
+            this, &MainWindow::reloadScriptEngine);
+}
+
+void MainWindow::reloadScriptEngine() {
+    Scripting::init(this);
+    this->ui->graphicsView_Map->clearOverlayMap();
+    Scripting::populateGlobalObject(this);
+    // Lying to the scripts here, simulating a project reload
+    Scripting::cb_ProjectOpened(projectConfig.getProjectDir());
+    if (editor && editor->map)
+        Scripting::cb_MapOpened(editor->map->name);
 }
 
 void MainWindow::on_pushButton_AddCustomHeaderField_clicked()
@@ -2776,14 +2782,7 @@ void MainWindow::on_actionRegion_Map_Editor_triggered() {
         }
     }
 
-    if (!this->regionMapEditor->isVisible()) {
-        this->regionMapEditor->show();
-    } else if (this->regionMapEditor->isMinimized()) {
-        this->regionMapEditor->showNormal();
-    } else {
-        this->regionMapEditor->raise();
-        this->regionMapEditor->activateWindow();
-    }
+    openSubWindow(this->regionMapEditor);
 }
 
 void MainWindow::on_pushButton_CreatePrefab_clicked() {
@@ -2815,26 +2814,13 @@ bool MainWindow::initRegionMapEditor(bool silent) {
 }
 
 void MainWindow::closeSupplementaryWindows() {
-    if (this->tilesetEditor) {
-        delete this->tilesetEditor;
-        this->tilesetEditor = nullptr;
-    }
-    if (this->regionMapEditor) {
-        delete this->regionMapEditor;
-        this->regionMapEditor = nullptr;
-    }
-    if (this->mapImageExporter) {
-        delete this->mapImageExporter;
-        this->mapImageExporter = nullptr;
-    }
-    if (this->newMapPrompt) {
-        delete this->newMapPrompt;
-        this->newMapPrompt = nullptr;
-    }
-    if (this->shortcutsEditor) {
-        delete this->shortcutsEditor;
-        this->shortcutsEditor = nullptr;
-    }
+    delete this->tilesetEditor;
+    delete this->regionMapEditor;
+    delete this->mapImageExporter;
+    delete this->newMapPrompt;
+    delete this->shortcutsEditor;
+    delete this->projectSettingsEditor;
+    delete this->customScriptsEditor;
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

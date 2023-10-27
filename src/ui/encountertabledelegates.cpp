@@ -69,12 +69,9 @@ QWidget *SpinBoxDelegate::createEditor(QWidget *parent, const QStyleOptionViewIt
 
     QSpinBox *editor = new QSpinBox(parent);
     editor->setFrame(false);
-    if (col == EncounterTableModel::ColumnType::MinLevel) {
+
+    if (col == EncounterTableModel::ColumnType::MinLevel || col == EncounterTableModel::ColumnType::MaxLevel) {
         editor->setMinimum(this->project->miscConstants.value("min_level_define").toInt());
-        editor->setMaximum(index.siblingAtColumn(EncounterTableModel::ColumnType::MaxLevel).data(Qt::EditRole).toInt());
-    }
-    else if (col == EncounterTableModel::ColumnType::MaxLevel) {
-        editor->setMinimum(index.siblingAtColumn(EncounterTableModel::ColumnType::MinLevel).data(Qt::EditRole).toInt());
         editor->setMaximum(this->project->miscConstants.value("max_level_define").toInt());
     }
     else if (col == EncounterTableModel::ColumnType::EncounterRate) {
